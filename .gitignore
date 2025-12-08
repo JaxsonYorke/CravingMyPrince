@@ -16,6 +16,9 @@
 /ProjectSettings/
 /Packages/
 /Scripts/obj/Debug/net10.0/
+/.bezisidekick/
+/.plastic/
+/.vscode/
 
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
