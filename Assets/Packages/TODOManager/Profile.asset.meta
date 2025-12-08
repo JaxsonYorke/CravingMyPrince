@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: deb078fc9cce0494fa4724dfa5274a4d
+timeCreated: 1553347168
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 142600
+  packageName: 'TODO: Manager'
+  packageVersion: 1.2
+  assetPath: Assets/TODOManager/Example/ExampleProfile (CS + JS).asset
+  uploadId: 352847
