@@ -21,6 +21,8 @@ public class State
     private bool isFalling;
     private bool isGrounded;
     private bool isDead;
+    public enum HitWall {none, left, right};
+    private HitWall wallHit;
 
     public State()
     {
@@ -29,6 +31,7 @@ public class State
         isFalling = false;
         isDead = false;
         isGrounded = false;
+        wallHit = HitWall.none;
     }
 
     public State GetState(){return this;}
@@ -38,6 +41,9 @@ public class State
     public bool IsFalling { get => isFalling; set => isFalling = value; }
     public bool IsGrounded { get => isGrounded; set => isGrounded = value; }
     public bool IsDead { get => isDead; set => isDead = value; }
+    public HitWall WallHit { get => wallHit; set => wallHit = value; }
+
+
 }
 
 

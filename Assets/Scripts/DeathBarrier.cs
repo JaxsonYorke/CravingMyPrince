@@ -2,16 +2,19 @@ using UnityEngine;
 
 public class DeathBarrier : MonoBehaviour
 {
+
+    [SerializeField] private GameLoopControler _gameLoopControler;
+    
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (collision.gameObject.name == "Princess")
+        if (collision.gameObject.tag == "Princess")
         {
-            collision.gameObject.GetComponent<Princess>().Death();
+            _gameLoopControler.tryKillPrincess();
         }
         
-        if (collision.gameObject.name == "Monster")
+        if (collision.gameObject.tag == "Monster")
         {
-            collision.gameObject.GetComponent<Monster>().Death();
+            _gameLoopControler.tryKillMonster();
         }
     }
 }
