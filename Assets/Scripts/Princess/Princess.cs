@@ -34,7 +34,7 @@ public class Princess : MonoBehaviour
     void Start()
     {
         // Initialize the state using the StateFactory
-        State = (PrincessState)StateFactory.InitState(this.gameObject);
+        State = (PrincessState) StateFactory.InitState(this.gameObject);
 
         // Set the references to the components to the actual components
         rb = GetComponent<Rigidbody2D>();
@@ -154,6 +154,10 @@ public class Princess : MonoBehaviour
     }
 
     #region Collision Handl
+
+
+
+// MARK:Enter
         void OnCollisionEnter2D(Collision2D collision)
         {
             var (princessFootCollider, 
@@ -188,9 +192,10 @@ public class Princess : MonoBehaviour
                 EventHandler.OnPrincessJumpedOnTopOfMonster.Invoke();
                 Debug.Log("Princess landed on HeadPlatformCollider");
             }
-            
         }
     
+// MARK:Stay
+
         void OnCollisionStay2D(Collision2D collision)
         {
             var (princessFootCollider, 
@@ -217,6 +222,8 @@ public class Princess : MonoBehaviour
             }
         }
     
+// MARK:Exit
+
         void OnCollisionExit2D(Collision2D collision)
         {
             var (princessFootCollider, 

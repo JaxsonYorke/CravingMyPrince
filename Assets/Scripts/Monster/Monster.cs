@@ -41,7 +41,6 @@ public class Monster : MonoBehaviour
 
 
 
-
     void Start()
     {
         // Initialize the state using the StateFactory
@@ -126,127 +125,138 @@ public class Monster : MonoBehaviour
 
 
 #region Collision Handl
-    
-        void OnCollisionEnter2D(Collision2D collision)
-        {        
-            var (monsterFootCollider, headPlatform, tilemap, princessCrush, princessFoot) = CollectCollisionRefs(collision);
-            string debugMsg = GenerateObjectsPresentInCollisionDebugMessage(
-                "Collision Enter detected with: ",
-                monsterFootCollider, headPlatform, tilemap, princessCrush
-            );
-            print(debugMsg);
 
-            if (collision.contactCount == 0) { Debug.LogWarning("No contact points in collision"); return; }
 
-            for (int i = 0; i < collision.contactCount; i++)
+
+// MARK:Enter
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {    
+            
+        var (monsterFootCollider, headPlatform, tilemap, princessCrush, princessFoot) = CollectCollisionRefs(collision);
+        string debugMsg = GenerateObjectsPresentInCollisionDebugMessage(
+            "Collision Enter detected with: ",
+            monsterFootCollider, headPlatform, tilemap, princessCrush
+        );
+        print(debugMsg);
+
+        if (collision.contactCount == 0) { Debug.LogWarning("No contact points in collision"); return; }
+
+        for (int i = 0; i < collision.contactCount; i++)
+        {
+            // Monster is on the ground
+            if (tilemap && monsterFootCollider && collision.GetContact(i).normal.y > 0.5f)
             {
-                // Monster is on the ground
-                if (tilemap && monsterFootCollider && collision.GetContact(i).normal.y > 0.5f)
-                {
-                    State.IsGrounded = true;
-                    State.IsJumping = false;
-                    State.IsFalling = false;
-                    EventHandler.OnMonsterLandedOnGround.Invoke();
-                    Debug.Log("Monster landed on Tilemap");
-                }
-                
-                // Monster hit a wall
-                if(tilemap && monsterFootCollider && -0.5 < collision.GetContact(i).normal.y && collision.GetContact(i).normal.y < 0.5)
-                {
-                    State.WallHit = collision.GetContact(i).normal.x > 0 ? MonsterState.HitWall.left : MonsterState.HitWall.right;
-                }
-        
-                // Monster crushed the princess
-                if (princessCrush && monsterFootCollider && collision.GetContact(i).normal.y > 0.5f)
-                {
-                    Debug.Log("Monster crushed the Princess!");
-                    GameLoopControler.tryCrushPrincess();
-                }
-        
-                // Princess jumped on top of Monster
-                if (princessFoot && headPlatform && collision.GetContact(i).normal.y < -0.5f)
-                {
-                    State.PrincessOnTop = true;
-                    EventHandler.OnPrincessJumpedOnTopOfMonster.Invoke();
-                    Debug.Log("Princess is on top of Monster");
-                }
-
+                State.IsGrounded = true;
+                State.IsJumping = false;
+                State.IsFalling = false;
+                EventHandler.OnMonsterLandedOnGround.Invoke();
+                Debug.Log("Monster landed on Tilemap");
+            }
+            
+            // Monster hit a wall
+            if(tilemap && monsterFootCollider && -0.5 < collision.GetContact(i).normal.y && collision.GetContact(i).normal.y < 0.5)
+            {
+                State.WallHit = collision.GetContact(i).normal.x > 0 ? MonsterState.HitWall.left : MonsterState.HitWall.right;
             }
     
-        }
-    
-        void OnCollisionStay2D(Collision2D collision)
-        {        
-            var (monsterFootCollider, HeadPlatformCollider, Tilemap, princessCrushCollider, princessFootCollider) = CollectCollisionRefs(collision);
-    
-            string debugMsg = GenerateObjectsPresentInCollisionDebugMessage(
-                "Collision Stay detected with: ",
-                monsterFootCollider,
-                HeadPlatformCollider,
-                Tilemap,
-                princessCrushCollider,
-                princessFootCollider
-            ); print(debugMsg);
-    
-
-    
-            for(int i = 0; i < collision.contactCount; i++)
+            // Monster crushed the princess
+            if (princessCrush && monsterFootCollider && collision.GetContact(i).normal.y > 0.5f)
             {
-                // Monster is on the ground
-                if (Tilemap && monsterFootCollider && collision.GetContact(i).normal.y > 0.5f)
-                {
-                    print($"Monster is grounded on Tilemap");
-                    State.IsGrounded = true;
-                    State.IsJumping = false;
-                    State.IsFalling = false;
-                    break;
-                }
-
-                // Monster hit a wall
-                if(Tilemap && monsterFootCollider && -0.5 < collision.GetContact(i).normal.y && collision.GetContact(i).normal.y < 0.5)
-                {
-                    State.WallHit = collision.GetContact(i).normal.x > 0 ? MonsterState.HitWall.left : MonsterState.HitWall.right;
-                    break;
-                }
-    
-                // Princess jumped on top of Monster
-                if(princessFootCollider && HeadPlatformCollider && collision.GetContact(i).normal.y < -0.5f)
-                {
-                    State.PrincessOnTop = true;
-                    Debug.Log("Princess is on top of Monster");
-                }
+                Debug.Log("Monster crushed the Princess!");
+                GameLoopControler.tryCrushPrincess();
             }
-        }
     
-        void OnCollisionExit2D(Collision2D collision)
-        {        
-            var (monsterFootCollider, HeadPlatformCollider, Tilemap, princessCrushCollider, princessFootCollider) = CollectCollisionRefs(collision);
-    
-            string debugMsg = GenerateObjectsPresentInCollisionDebugMessage(
-                "Collision Exit detected with: ",
-                monsterFootCollider,
-                HeadPlatformCollider,
-                Tilemap,
-                princessCrushCollider,
-                princessFootCollider
-            ); print(debugMsg);
-
-    
-            if (Tilemap && monsterFootCollider)
+            // Princess jumped on top of Monster
+            if (princessFoot && headPlatform && collision.GetContact(i).normal.y < -0.5f)
             {
-                print($"Monster left the tilemap");
-                State.IsGrounded = false;
+                State.PrincessOnTop = true;
+                EventHandler.OnPrincessJumpedOnTopOfMonster.Invoke();
+                Debug.Log("Princess is on top of Monster");
             }
-
-            if (princessFootCollider && HeadPlatformCollider)
-            {
-                State.PrincessOnTop = false;
-                EventHandler.OnPrincessLeftTopOfMonster.Invoke();
-                Debug.Log("Princess left the top of Monster");
-            }
-
 
         }
+
+    }
+
+// MARK:Stay
+    void OnCollisionStay2D(Collision2D collision)
+    {        
+        var (monsterFootCollider, HeadPlatformCollider, Tilemap, princessCrushCollider, princessFootCollider) = CollectCollisionRefs(collision);
+
+        string debugMsg = GenerateObjectsPresentInCollisionDebugMessage(
+            "Collision Stay detected with: ",
+            monsterFootCollider,
+            HeadPlatformCollider,
+            Tilemap,
+            princessCrushCollider,
+            princessFootCollider
+        ); print(debugMsg);
+
+
+
+        for(int i = 0; i < collision.contactCount; i++)
+        {
+            // Monster is on the ground
+            if (Tilemap && monsterFootCollider && collision.GetContact(i).normal.y > 0.5f)
+            {
+                print($"Monster is grounded on Tilemap");
+                State.IsGrounded = true;
+                State.IsJumping = false;
+                State.IsFalling = false;
+                break;
+            }
+
+            // Monster hit a wall
+            if(Tilemap && monsterFootCollider && -0.5 < collision.GetContact(i).normal.y && collision.GetContact(i).normal.y < 0.5)
+            {
+                State.WallHit = collision.GetContact(i).normal.x > 0 ? MonsterState.HitWall.left : MonsterState.HitWall.right;
+                break;
+            }
+
+            // Princess jumped on top of Monster
+            if(princessFootCollider && HeadPlatformCollider && collision.GetContact(i).normal.y < -0.5f)
+            {
+                State.PrincessOnTop = true;
+                Debug.Log("Princess is on top of Monster");
+            }
+        }
+    }
+
+// MARK:Exit
+    void OnCollisionExit2D(Collision2D collision)
+    {        
+        var (monsterFootCollider, HeadPlatformCollider, Tilemap, princessCrushCollider, princessFootCollider) = CollectCollisionRefs(collision);
+
+        string debugMsg = GenerateObjectsPresentInCollisionDebugMessage(
+            "Collision Exit detected with: ",
+            monsterFootCollider,
+            HeadPlatformCollider,
+            Tilemap,
+            princessCrushCollider,
+            princessFootCollider
+        ); print(debugMsg);
+
+
+        if (Tilemap && monsterFootCollider)
+        {
+            print($"Monster left the tilemap");
+            State.IsGrounded = false;
+        }
+
+        if (princessFootCollider && HeadPlatformCollider)
+        {
+            State.PrincessOnTop = false;
+            EventHandler.OnPrincessLeftTopOfMonster.Invoke();
+            Debug.Log("Princess left the top of Monster");
+        }
+
+
+    }
+
+    // void OnTriggerEnter2D(Collider2D otherCollider)
+    // {
+    // }
     
 #endregion
 
