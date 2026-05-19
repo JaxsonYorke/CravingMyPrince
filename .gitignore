@@ -105,3 +105,12 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+
+.idea/
+.github/
+Assets/data/.env
+Assets/data/.env.local
+
+Assets/packages/
+supabase/

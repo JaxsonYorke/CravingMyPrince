@@ -1,7 +1,16 @@
 using System;
 using UnityEngine;
 using UnityEngine.Tilemaps;
+using UnityEngine.InputSystem;
 using Assets.Scripts.CustomDebug;
+using UnityEngine.Assertions;
+
+
+/*
+ * Notes:
+ * - The movement controls for the characters are going to all stay in the moveVector2, x is the left and right, the y is up and down
+ */
+
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Transform))]
@@ -9,41 +18,75 @@ using Assets.Scripts.CustomDebug;
 public class Princess : MonoBehaviour
 {
     // Variable to hold the state object for the princess
-    [HideInInspector]
-    public PrincessState State { get; set; }
-    // Two references for the princess's components
-    public Rigidbody2D rb;
-    public SpriteRenderer sr;
+    [HideInInspector] public PrincessState State { get; set; }
 
-    // Sprites for left/right movement and idle
-    public Sprite leftOrRightSprite;
-    public Sprite notMovingSprite;
+    [SerializeField] private EventHandler EventHandler;
+    [SerializeField] private GameObject Monster;
+    private Rigidbody2D monsterRb;
+
+    [SerializeField] public PrincessSprites PrincessSprites;
 
     // Reference to the monster GameObject
-    public GameObject Monster;
 
-    [SerializeField] EventHandler EventHandler;
+    private Rigidbody2D rb;
+    private SpriteRenderer sr;
 
-    // Movement variables
-    private int horizontal = 0;
-    private bool jumpPressed = false;
-    public float speed;
-    public float jumpForce;
+
+
+    [SerializeField] public float speed;
+    [SerializeField] public float jumpForce;
+    [SerializeField] public float InAirMovementSpeedDampener;
+    [SerializeField] public float coyoteTime;
+    
+    
+    // Input Actions
+    public InputActionAsset InputActions;
+    private InputAction m_moveAction;
+    private InputAction m_jumpAction;
+    private InputAction m_fallThroughAction;
+
+
+    private void OnEnable()
+    {
+        print("enabled");
+        InputActions.FindActionMap("Princess").Enable();
+        m_moveAction = InputActions["Princess/Move"];
+        m_jumpAction = InputActions["Princess/Jump"];
+        m_fallThroughAction = InputActions["Princess/FallThrough"];
+
+    }
+
+    private void OnDisable()
+    {
+        InputActions.FindActionMap("Princess").Disable();
+    }
+
+
+    private void Awake()
+    {
+        
+        // Initialize the state using the StateFactory
+        State = (PrincessState) StateFactory.InitState(this.gameObject);
+        
+        // Set the references to the components to the actual components
+        rb = GetComponent<Rigidbody2D>();
+        sr = GetComponent<SpriteRenderer>();
+        
+        // This makes it so the princess doesnt fall over (rotate on the z axis)
+        rb.freezeRotation = true;
+    }
+    
+    
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        // Initialize the state using the StateFactory
-        State = (PrincessState) StateFactory.InitState(this.gameObject);
+        Assert.IsNotNull(EventHandler, "EventHandler reference is not set in the inspector");
+        Assert.IsNotNull(InputActions, "InputActions reference is not set in the inspector");
+        Assert.IsNotNull(Monster, "Monster reference is not set in the inspector");
 
-        // Set the references to the components to the actual components
-        rb = GetComponent<Rigidbody2D>();
-        sr = GetComponent<SpriteRenderer>();
-
-
-        // This makes it so the princess doesnt fall over (rotate on the z axis)
-        rb.freezeRotation = true;
-    
+        Assert.IsNotNull(rb, "Rigidbody2D component not found on Princess");
+        Assert.IsNotNull(sr, "SpriteRenderer component not found on Princess");    
 
         DebugStatsDisplay.Instance.RegisterDebugStatsRequest(
             new DebugStatsRequest("Princess IsGrounded", () => State.IsGrounded));
@@ -55,19 +98,29 @@ public class Princess : MonoBehaviour
             new DebugStatsRequest("Princess IsJumping", () => State.IsJumping));
         DebugStatsDisplay.Instance.RegisterDebugStatsRequest(
             new DebugStatsRequest("Princess IsFalling", () => State.IsFalling));
+        DebugStatsDisplay.Instance.RegisterDebugStatsRequest(
+            new DebugStatsRequest("Princess Horizontal Input", () => horizontal));
+        DebugStatsDisplay.Instance.RegisterDebugStatsRequest(
+            new DebugStatsRequest("Princess Input", () => m_moveAction.ReadValue<float>()));
+        DebugStatsDisplay.Instance.RegisterDebugStatsRequest(
+            new DebugStatsRequest("Princess Velocity", () => rb.linearVelocity));
+        
 
-        if (rb != null)
-        {
-            DebugStatsDisplay.Instance.RegisterDebugStatsRequest(
-                new DebugStatsRequest("Princess Velocity", () => rb.linearVelocity));
-        }
+        monsterRb = Monster.GetComponent<Rigidbody2D>();
+        Assert.IsNotNull(monsterRb, "Monster Rigidbody2D component not found");
 
         // Listen for own death
         EventHandler.OnPrincessDeath.AddListener(Death);
     }
 
+
     // Update is called once per frame, This is for detection of inputs from users
     // and logic that doesn't involve physics
+
+    private Coroutine coyoteTimeCouroutineRef;
+    private float horizontal = 0;
+    private bool jumpPressed = false;
+    private bool jumpWasReleased = false;
     void Update()
     {
         //TODO: this is going to have to change when we change to other movement
@@ -77,88 +130,160 @@ public class Princess : MonoBehaviour
 
 
         // We use a horizontal variable to store the direction of movement inputed by the user
-        if (Input.GetKey(KeyCode.A)) {       horizontal = -1;  State.IsMoving = true; }
-        else if (Input.GetKey(KeyCode.D)) {  horizontal = 1;   State.IsMoving = true; }
-        else {                               horizontal = 0;   State.IsMoving = false; }
+        horizontal = m_moveAction.ReadValue<float>();
 
         // Jumping
-        if (Input.GetKeyDown(KeyCode.W) && State.IsGrounded) { 
-            jumpPressed = true; State.IsJumping = true; 
+        if (m_jumpAction.WasPressedThisFrame() && State.IsGrounded) {
+            print("Jump button pressed and princess is grounded, setting jumpPressed to true");
+            //? maybe at some point we implement asking the game if they can jump. This way we could have alot more control over the characters being able to do certain actions based on the gamestate or powers or something like that 
+            jumpPressed = true;
+            if(coyoteTimeCouroutineRef != null)
+            {
+                StopCoroutine(coyoteTimeCouroutineRef);
+            }
+            coyoteTimeCouroutineRef = StartCoroutine(ResetCoyoteTime());
+        }
+        if(m_jumpAction.WasReleasedThisFrame() && rb.linearVelocity.y > 0.1f && State.IsJumping)
+        {
+            jumpWasReleased = true;
         }
 
-// Going Down Through a block
-        if (Input.GetKeyDown(KeyCode.S) && State.IsOnMonster)
+        // Going Down Through a block
+        if (m_fallThroughAction.WasPressedThisFrame() && State.IsOnMonster)
         {
-            // Turn off the head platform collider and the enable if above script
-            GameObject HeadPlatformColliderGameObject = Monster.GetComponentInChildren<HeadPlatformCollider>().gameObject;
-            HeadPlatformColliderGameObject.GetComponent<EnableIfAbove>().enabled = false;
-            HeadPlatformColliderGameObject.GetComponent<BoxCollider2D>().enabled = false;
+            EventHandler.FallThroughHeadPlatform(rb);
         }
 
-        if (Input.GetKeyUp(KeyCode.S))
-        {
-            GameObject HeadPlatformColliderGameObject = Monster.GetComponentInChildren<HeadPlatformCollider>().gameObject;
-            HeadPlatformColliderGameObject.GetComponent<EnableIfAbove>().enabled = true;
-            HeadPlatformColliderGameObject.GetComponent<BoxCollider2D>().enabled = true;
-        }
 
 
         // flipping the sprite
         if (State.IsMoving)
         {
             sr.flipX = horizontal < 0;
-            sr.sprite = leftOrRightSprite;
+            sr.sprite = PrincessSprites.leftOrRightSprite;
         }
-        else sr.sprite = notMovingSprite;
+        else sr.sprite = PrincessSprites.notMovingSprite;
     }
 
     // FixedUpdate is called at a fixed interval and is independent of frame rate. 
     // Put physics code here so the physics simulation is smooth regardless of framerate.
-    void FixedUpdate()
-    {
+    Vector2 _inheritedVelocityFromMonster = Vector2.zero;
+    Vector2 _playerVelocity = Vector2.zero;
+    private float _lastHorizontalInput = 0;
+    private bool _justLeftMonster = false;
 
-        //TODO: all going to have to change when we change to new movement style
-        // Jumping
-        if (jumpPressed)
+    private bool _maxSpeedSet = false;
+    private float _maxAirborneHorizontalSpeed = 0;
+    private void FixedUpdate()
+    {
+        State.IsMoving = horizontal != 0;
+        State.IsFalling = rb.linearVelocity.y < 0 && !State.IsGrounded;
+
+        float onGroundMovement = speed * horizontal * Time.fixedDeltaTime;
+        float inAirMovement =  speed * horizontal * Time.fixedDeltaTime * InAirMovementSpeedDampener;
+        float onMonsterMovement = onGroundMovement + monsterRb.linearVelocity.x;
+        
+        void clearMaxAirborneHorizontalSpeed()
         {
+            _maxSpeedSet = false;
+            _maxAirborneHorizontalSpeed = 0;
+        }
+
+        void setMaxAirborneHorizontalSpeed()
+        {
+            if(!_maxSpeedSet)
+            {
+                _maxAirborneHorizontalSpeed = Math.Max(Math.Abs(_playerVelocity.x), Math.Abs(speed * Time.fixedDeltaTime));
+                _maxSpeedSet = true;
+            }
+        }
+
+
+
+
+        _playerVelocity = rb.linearVelocity;
+
+        if(State.IsGrounded){
+            clearMaxAirborneHorizontalSpeed();
+            if(State.IsOnMonster) {
+                _playerVelocity.x = onMonsterMovement;
+            } else {
+                _playerVelocity.x = onGroundMovement;
+            }
+
+        } else if(State.IsInAir) {
+            setMaxAirborneHorizontalSpeed();
+            _playerVelocity.x += inAirMovement;
+
+// ! This clamps the other side aswell, for now its fine but if we get them to fall really far, this might stop them from going far in the other direction.
+            _playerVelocity.x = Mathf.Clamp(_playerVelocity.x, -Mathf.Abs(_maxAirborneHorizontalSpeed), Mathf.Abs(_maxAirborneHorizontalSpeed));
+        }
+
+
+
+        // Jumping
+        if (jumpPressed && State.IsGrounded)
+        {
+            try
+            {
+                StopCoroutine(coyoteTimeCouroutineRef);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("Tried to stop coyote time coroutine but it was already stopped. Exception: " + e);
+            }
+
+            _inheritedVelocityFromMonster = Vector2.zero;
+
             // only jump once per press
             jumpPressed = false;
-            // set the y velocity to the jump force
-            rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+            State.IsJumping = true;
+
+            // Princess normal jump velocity
+            Vector2 jumpVelocity = Vector2.up * jumpForce;
+
+
+            // Add the final Vertical jump velocity to the new velocity
+            _playerVelocity += jumpVelocity;
         }
+
         // This makes it so if the player releases the jump button while going up, they will fall faster
-        else if (Input.GetKeyUp(KeyCode.W) && rb.linearVelocity.y > 0f)
+        if (jumpWasReleased)
         {
-            rb.linearVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.y * 0.5f);
+            jumpWasReleased = false;
+            _playerVelocity.y *= 0.5f;
         }
 
         // Check if princess is on top of monster and moving, If so her movement should be the monsters, plus her own input
-        if (State.IsOnMonster)
-        {
-            // When on monster, add player input to existing velocity (which includes monster's movement)
-            Vector2 currentVelocity = rb.linearVelocity;
-            Vector2 monsterVelocity = Monster.GetComponent<Rigidbody2D>().linearVelocity;
-            float relativeYVelocity = Math.Clamp(currentVelocity.y - monsterVelocity.y, 0, float.PositiveInfinity);
-            print("Relative Y Velocity: " + relativeYVelocity);
-            print("Monster Prior Velocity: " + monsterVelocity);
-            print("Current Prior Velocity: " + currentVelocity);
-            rb.linearVelocity = new Vector2(monsterVelocity.x + (speed * horizontal), relativeYVelocity + monsterVelocity.y);
-            print("New Velocity: " + rb.linearVelocity);
-        }
-        else
-        {
-            // Normal movement when not on monster
-            rb.linearVelocity = new Vector2(speed * horizontal, rb.linearVelocity.y);
-        }
+        // if (State.IsOnMonster)
+        // {
+        //     _inheritedVelocityFromMonster.x = monsterRb.linearVelocity.x;
+        // }
 
+        
+
+
+
+        // print($"Horizontal Input: {horizontal}, Player Velocity: {_playerVelocity}, Inherited Monster Velocity: {_inheritedVelocityFromMonster.x}");
+
+        // Apply the new velocity
+        rb.linearVelocity = _playerVelocity;
+
+
+    // Reset certain variables after applying movement
+        _lastHorizontalInput = horizontal;
+        if(_justLeftMonster)
+        {
+            _justLeftMonster = false;
+        }
     }
 
-    #region Collision Handl
+    #region Collision Handler
 
 
 
-// MARK:Enter
-        void OnCollisionEnter2D(Collision2D collision)
+    // MARK:Enter
+    void OnCollisionEnter2D(Collision2D collision)
         {
             var (princessFootCollider, 
             tilemapCollider, 
@@ -166,7 +291,7 @@ public class Princess : MonoBehaviour
             crushCollider) = CollectCollisionRefs(collision);
     
     
-            print(GenerateObjectsPresentInCollisionDebugMessage("Princess Collision Enter Check:", princessFootCollider, tilemapCollider, headPlatformCollider, crushCollider));
+            // print(GenerateObjectsPresentInCollisionDebugMessage("Princess Collision Enter Check:", princessFootCollider, tilemapCollider, headPlatformCollider, crushCollider));
     
     
             if(collision.contactCount == 0)
@@ -181,6 +306,8 @@ public class Princess : MonoBehaviour
                 State.IsJumping = false;
                 State.IsFalling = false;
                 EventHandler.OnPrincessLandedOnGround.Invoke();
+
+                _inheritedVelocityFromMonster = Vector2.zero;
                 Debug.Log("Princess landed on Tilemap");
             }
             else if (headPlatformCollider && princessFootCollider && collision.GetContact(0).normal.y > 0.5f)
@@ -189,6 +316,7 @@ public class Princess : MonoBehaviour
                 State.IsOnMonster = true;
                 State.IsJumping = false;
                 State.IsFalling = false;
+                _inheritedVelocityFromMonster = Vector2.zero;
                 EventHandler.OnPrincessJumpedOnTopOfMonster.Invoke();
                 Debug.Log("Princess landed on HeadPlatformCollider");
             }
@@ -203,23 +331,23 @@ public class Princess : MonoBehaviour
             headPlatformCollider, 
             crushCollider) = CollectCollisionRefs(collision);
     
-            string debugMsg = GenerateObjectsPresentInCollisionDebugMessage("Princess Stay Collision:", tilemapCollider, headPlatformCollider, princessFootCollider);
-            print(debugMsg);
+            // string debugMsg = GenerateObjectsPresentInCollisionDebugMessage("Princess Stay Collision:", tilemapCollider, headPlatformCollider, princessFootCollider);
+            // print(debugMsg);
     
-            if (tilemapCollider && princessFootCollider && collision.GetContact(0).normal.y > 0.5f)
-            {
-                State.IsGrounded = true;
-                State.IsJumping = false;
-                State.IsFalling = false;
+            // if (tilemapCollider && princessFootCollider && collision.GetContact(0).normal.y > 0.5f)
+            // {
+            //     State.IsGrounded = true;
+            //     State.IsJumping = false;
+            //     State.IsFalling = false;
                 
-            }
-            else if (headPlatformCollider && princessFootCollider && collision.GetContact(0).normal.y > 0.5f)
-            {
-                State.IsGrounded = true;
-                State.IsOnMonster = true;
-                State.IsJumping = false;
-                State.IsFalling = false;
-            }
+            // }
+            // else if (headPlatformCollider && princessFootCollider && collision.GetContact(0).normal.y > 0.5f)
+            // {
+            //     State.IsGrounded = true;
+            //     State.IsOnMonster = true;
+            //     State.IsJumping = false;
+            //     State.IsFalling = false;
+            // }
         }
     
 // MARK:Exit
@@ -231,26 +359,45 @@ public class Princess : MonoBehaviour
             headPlatformCollider, 
             crushCollider) = CollectCollisionRefs(collision);
     
-            string debugMsg = GenerateObjectsPresentInCollisionDebugMessage("Princess Collision Exit Check: ", tilemapCollider, headPlatformCollider, princessFootCollider);
-            print(debugMsg);
+            // string debugMsg = GenerateObjectsPresentInCollisionDebugMessage("Princess Collision Exit Check: ", tilemapCollider, headPlatformCollider, princessFootCollider);
+            // print(debugMsg);
     
             if (tilemapCollider && princessFootCollider)
             {
-                print($"Princess left the tilemap");
                 State.IsGrounded = false;
             }
             else if (headPlatformCollider && princessFootCollider)
             {
                 State.IsGrounded = false;
                 State.IsOnMonster = false;
-                //TODO: This should add the monsters movement to the princess's movement when she leaves 
-                Debug.Log("Princess left HeadPlatformCollider");
+
+                _justLeftMonster = true;
+                _inheritedVelocityFromMonster = Vector2.zero;
             }
             
         }
     #endregion
 
+
+    void OnTriggerEnter2D(Collider2D collision)
+    {
+        if(collision.gameObject.CompareTag("Finish"))
+        {
+            EventHandler.WinGame();
+        }
+    }
+
     #region Helper Methods
+
+    /// <summary>
+    /// Resets the coyote time, allowing the princess to jump again after a short delay.
+    /// </summary>
+    private System.Collections.IEnumerator ResetCoyoteTime()
+        {
+            yield return new WaitForSeconds(coyoteTime);
+            print("Coyote time reset, princess can jump again");
+            jumpPressed = false;
+        }
 
         /// <summary>
         /// Generates a debug message indicating which objects are present in the collision.
@@ -301,4 +448,11 @@ public class Princess : MonoBehaviour
         Debug.LogFormat("{0} is dead", this.gameObject.name);
     }
     
+}
+
+[System.Serializable]
+public class PrincessSprites
+{
+    public Sprite leftOrRightSprite;
+    public Sprite notMovingSprite;
 }

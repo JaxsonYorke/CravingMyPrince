@@ -1,20 +1,21 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class DeathBarrier : MonoBehaviour
 {
 
-    [SerializeField] private GameLoopControler _gameLoopControler;
+    [FormerlySerializedAs("_gameLoopControler")] [SerializeField] private GameLoopControler gameLoopControler;
     
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (collision.gameObject.tag == "Princess")
+        switch (collision.gameObject.tag)
         {
-            _gameLoopControler.tryKillPrincess();
-        }
-        
-        if (collision.gameObject.tag == "Monster")
-        {
-            _gameLoopControler.tryKillMonster();
+            case "Princess":
+                gameLoopControler.tryKillPrincess();
+                break;
+            case "Monster":
+                gameLoopControler.tryKillMonster();
+                break;
         }
     }
 }

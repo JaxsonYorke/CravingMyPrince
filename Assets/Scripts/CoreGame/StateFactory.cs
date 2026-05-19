@@ -39,6 +39,7 @@ public class State
     public bool IsMoving { get => isMoving; set => isMoving = value; }
     public bool IsJumping { get => isJumping; set => isJumping = value; }
     public bool IsFalling { get => isFalling; set => isFalling = value; }
+    public bool IsInAir { get => (isJumping || isFalling) && !isGrounded; } //! If you add a way the character is in the air this should also be changed to include that
     public bool IsGrounded { get => isGrounded; set => isGrounded = value; }
     public bool IsDead { get => isDead; set => isDead = value; }
     public HitWall WallHit { get => wallHit; set => wallHit = value; }
