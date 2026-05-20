@@ -1,0 +1,92 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1412740310607601372
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3835473782426054090}
+  - component: {fileID: 3565250929783339737}
+  - component: {fileID: 2573982735120555112}
+  m_Layer: 0
+  m_Name: GameLoopController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3835473782426054090
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412740310607601372}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 1.0316243, y: -0.27074197, z: -0.005832941}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &3565250929783339737
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412740310607601372}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cddddb6398ed54c49b8752f4a20b8b4b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  EventHandler: {fileID: 2573982735120555112}
+  GameoverScreen: {fileID: 0}
+  Princess: {fileID: 0}
+  Monster: {fileID: 0}
+--- !u!114 &2573982735120555112
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412740310607601372}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 72f56cc4c57995a409bdda0fdd096f15, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  _OnGameRestart:
+    m_PersistentCalls:
+      m_Calls: []
+  _OnGameWin:
+    m_PersistentCalls:
+      m_Calls: []
+  _MonsterEvents:
+    OnLandedOnGround:
+      m_PersistentCalls:
+        m_Calls: []
+    OnDeath:
+      m_PersistentCalls:
+        m_Calls: []
+  _PrincessEvents:
+    OnLandedOnGround:
+      m_PersistentCalls:
+        m_Calls: []
+    OnDeath:
+      m_PersistentCalls:
+        m_Calls: []
+  _OnPrincessJumpedOnTopOfMonster:
+    m_PersistentCalls:
+      m_Calls: []
+  _OnPrincessLeftTopOfMonster:
+    m_PersistentCalls:
+      m_Calls: []
+  _OnCrushPrincess:
+    m_PersistentCalls:
+      m_Calls: []

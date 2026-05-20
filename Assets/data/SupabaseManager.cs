@@ -22,8 +22,13 @@ public class SupabaseManager : MonoBehaviour
     public Player _player;
     public Stats _playerStats;
 
+    [HideInInspector]
     public bool IsReady { get; private set; }
+    
+    [HideInInspector]
     public string _deviceId;
+
+
     private Task _initializeTask;
     private readonly HttpClient _httpClient = new HttpClient();
     
@@ -53,6 +58,7 @@ public class SupabaseManager : MonoBehaviour
 
     private async Task EnsurePlayerRecord()
     {
+        print("initializing player record...");
         await EnsureInitializedAsync();
         Player newPlayer = null;
         Stats newStats = null;
@@ -62,9 +68,6 @@ public class SupabaseManager : MonoBehaviour
 
         var playerStatsRes = await _supabase.From<Stats>().Where(s => s.player_id == _player.id).Get();
         _playerStats = playerStatsRes.Models.Count > 0 ? playerStatsRes.Models[0] : null;
-
-        print(playerRes);
-        print(playerStatsRes);
 
         if(playerRes.Models.Count == 0)
         {
