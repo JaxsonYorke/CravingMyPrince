@@ -12,6 +12,11 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+/[Pp]ackages/*
+![Pp]ackages/manifest.json
+![Pp]ackages/packages-lock.json
+
+
 /Scripts/obj/Debug/net10.0/
 /.bezisidekick/
 /.plastic/
