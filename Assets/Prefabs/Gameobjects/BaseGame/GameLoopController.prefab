@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &1412740310607601372
+--- !u!1 &4355684221510594486
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,9 +8,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 3835473782426054090}
-  - component: {fileID: 3565250929783339737}
-  - component: {fileID: 2573982735120555112}
+  - component: {fileID: 1651398494376091238}
+  - component: {fileID: 8126435041816834092}
+  - component: {fileID: 2665433031338195503}
   m_Layer: 0
   m_Name: GameLoopController
   m_TagString: Untagged
@@ -18,13 +18,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &3835473782426054090
+--- !u!4 &1651398494376091238
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412740310607601372}
+  m_GameObject: {fileID: 4355684221510594486}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 1.0316243, y: -0.27074197, z: -0.005832941}
@@ -33,29 +33,29 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &3565250929783339737
+--- !u!114 &8126435041816834092
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412740310607601372}
+  m_GameObject: {fileID: 4355684221510594486}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cddddb6398ed54c49b8752f4a20b8b4b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  EventHandler: {fileID: 2573982735120555112}
+  EventHandler: {fileID: 2665433031338195503}
   GameoverScreen: {fileID: 0}
-  Princess: {fileID: 0}
-  Monster: {fileID: 0}
---- !u!114 &2573982735120555112
+  Princess: {fileID: 7514244459658094653, guid: fa4633ee94a3883429a55291d5bf4e18, type: 3}
+  Monster: {fileID: 8272094377428564711, guid: 58d6954054dde6548b26e620a557da25, type: 3}
+--- !u!114 &2665433031338195503
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412740310607601372}
+  m_GameObject: {fileID: 4355684221510594486}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 72f56cc4c57995a409bdda0fdd096f15, type: 3}

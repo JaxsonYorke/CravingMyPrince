@@ -2,7 +2,6 @@ using UnityEngine;
 using Supabase;
 using System;
 using System.Text;
-using System.Net.Http;
 using System.Threading.Tasks;
 using Client = Supabase.Client;
 
@@ -18,19 +17,25 @@ public enum NotificationType
 
 public class SupabaseManager : MonoBehaviour
 {
+    public static SupabaseManager Instance { get; private set; }
     public Client _supabase;
     public Player _player;
     public Stats _playerStats;
 
     [HideInInspector]
     public bool IsReady { get; private set; }
-    
+    [HideInInspector]
+    public bool IsOffline { get; private set; }
+
     [HideInInspector]
     public string _deviceId;
 
 
     private Task _initializeTask;
-    private readonly HttpClient _httpClient = new HttpClient();
+
+    private TaskCompletionSource<bool> _initializationTcs = new TaskCompletionSource<bool>();
+    public Task Initialization => _initializationTcs.Task;
+
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -42,32 +47,59 @@ public class SupabaseManager : MonoBehaviour
         _ = StartFlowAsync();
     }
 
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Debug.LogError("Multiple SupabaseManager instances detected! Destroying duplicate.");
+            Destroy(this.gameObject);
+            return;
+        }
+
+        Instance = this;
+        DontDestroyOnLoad(this.gameObject);
+    }
+
 #region Initialization
     private async Task StartFlowAsync()
     {
+        // Check the internet connection, if there is no internet connection, set IsOffline to true and skip initialization
+        if (Application.internetReachability == NetworkReachability.NotReachable)
+        {
+            Debug.LogWarning("No internet connection detected. SupabaseManager will operate in offline mode.");
+            IsReady = true; // Set to true to allow the game to continue, but you may want to handle this differently
+            IsOffline = true;
+            _initializationTcs.SetResult(false);
+            return;
+        }
         try
         {
             await _initializeTask;
-            await EnsurePlayerRecord();
+            await EnsureRecords();
+
+            _initializationTcs.SetResult(true);
         }
         catch (Exception e)
         {
             Debug.LogError($"Supabase init failed: {e}");
+            _initializationTcs.SetException(e);
         }
     }
 
-    private async Task EnsurePlayerRecord()
+    private async Task EnsureRecords()
     {
         print("initializing player record...");
         await EnsureInitializedAsync();
-        Player newPlayer = null;
-        Stats newStats = null;
+        await EnsurePlayerRecord();
+        await EnsurePlayerStatsRecord();
+        await EnsurePlayerSavesRecord();
 
+    }
+
+    private async Task EnsurePlayerRecord(){
+        Player newPlayer = null;
         var playerRes = await _supabase.From<Player>().Where(p => p.device_id == _deviceId).Get();
         _player = playerRes.Models.Count > 0 ? playerRes.Models[0] : null;
-
-        var playerStatsRes = await _supabase.From<Stats>().Where(s => s.player_id == _player.id).Get();
-        _playerStats = playerStatsRes.Models.Count > 0 ? playerStatsRes.Models[0] : null;
 
         if(playerRes.Models.Count == 0)
         {
@@ -83,6 +115,14 @@ public class SupabaseManager : MonoBehaviour
             Debug.Log($"Created new player with device id {_deviceId}");
 
         }
+    }
+
+    private async Task EnsurePlayerStatsRecord()
+    {
+        Stats newStats = null;
+        var playerStatsRes = await _supabase.From<Stats>().Where(s => s.player_id == _player.id).Get();
+        _playerStats = playerStatsRes.Models.Count > 0 ? playerStatsRes.Models[0] : null;
+
         if (playerStatsRes.Models.Count == 0)
         {
             // create the stats for the player
@@ -97,8 +137,59 @@ public class SupabaseManager : MonoBehaviour
             await _supabase.From<Stats>().Insert(newStats);
             Debug.Log($"Created stats for existing player with device id {_deviceId}");
         }
+    }
 
+    private async Task EnsurePlayerSavesRecord()
+    {
+        var playerSavesRes = await _supabase.Storage.From("player_saves").List(_player.id + "/");
 
+        foreach(var item in playerSavesRes)
+        {
+            Debug.Log($"Found save file: {item.Name}");
+        }
+
+        if (playerSavesRes.Count == 0)
+        {
+            // create empty saves for the player
+            var emptySaveData = Encoding.UTF8.GetBytes(Save.GetEmptySaveJson());
+            await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_1.json");
+            await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_2.json");
+            await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_3.json");
+            Debug.Log($"Created empty saves for existing player with device id {_deviceId}");
+        }
+        if(playerSavesRes.Count == 1 || playerSavesRes.Count == 2){
+            bool hasSave1 = false;
+            bool hasSave2 = false;
+            bool hasSave3 = false;
+
+            foreach(var item in playerSavesRes)
+            {
+                Debug.Log($"Found save file: {item.Name}");
+                if(item.Name == "save_1.json") hasSave1 = true;
+                if(item.Name == "save_2.json") hasSave2 = true;
+                if(item.Name == "save_3.json") hasSave3 = true;
+            }
+
+            if(!hasSave1)
+            {
+                var emptySaveData = Encoding.UTF8.GetBytes(Save.GetEmptySaveJson());
+                await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_1.json");
+                Debug.Log($"Created missing save1 for existing player with device id {_deviceId}");
+            }
+            if(!hasSave2)
+            {
+                var emptySaveData = Encoding.UTF8.GetBytes(Save.GetEmptySaveJson());
+                await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_2.json");
+                Debug.Log($"Created missing save2 for existing player with device id {_deviceId}");
+            }
+            if(!hasSave3)
+            {
+                var emptySaveData = Encoding.UTF8.GetBytes(Save.GetEmptySaveJson());
+                await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_3.json");
+                Debug.Log($"Created missing save3 for existing player with device id {_deviceId}");
+            }
+            
+        }
     }
 
 
@@ -116,20 +207,10 @@ public class SupabaseManager : MonoBehaviour
         // key is not a security risk - in JavaScript projects, this key is visible
         // in the browser viewing source!
         _supabase = new Client(SupabaseSettings.SupabaseURL, SupabaseSettings.SupabaseAnonKey, options);
-        await _supabase.InitializeAsync();
-        IsReady = true;
-    }
 
-    private void PostMessage(NotificationType type, string title, Exception exception = null)
-    {
-        string message = $"[{type}] {title}";
-        if (exception != null)
-        {
-            message += $"\n{exception.Message}";
-        }
-        
-        Debug.Log(message);
-        // Add your UI notification logic here
+        await _supabase.InitializeAsync();
+
+        IsReady = true;
     }
 
     private string GetOrCreateDeviceId()
@@ -159,81 +240,6 @@ public class SupabaseManager : MonoBehaviour
 
 
 
-
-    // public async Task SendAnalyticsEvent(string eventName, string payloadJson = null)
-    // {
-    //     await EnsureInitializedAsync();
-
-    //     var analyticsEvent = new AnalyticsEvent
-    //     {
-    //         device_id = _deviceId,
-    //         event_name = eventName,
-    //         payload = payloadJson,
-    //         created_at = DateTime.UtcNow
-    //     };
-
-    //     await _supabase.From<AnalyticsEvent>().Insert(analyticsEvent);
-    // }
-
-    // public async Task<bool> UploadCloudSave(string saveSlot, string dataJson)
-    // {
-    //     await EnsureInitializedAsync();
-
-    //     var request = new CloudSaveRequest
-    //     {
-    //         device_id = _deviceId,
-    //         save_slot = saveSlot,
-    //         data_json = dataJson
-    //     };
-
-    //     string url = $"{SupabaseSettings.SupabaseURL}/functions/v1/{SupabaseSettings.SaveUploadFunction}";
-    //     string json = JsonUtility.ToJson(request);
-    //     var response = await PostJsonAsync(url, json);
-
-    //     if (!response.IsSuccessStatusCode)
-    //     {
-    //         Debug.LogError($"Save upload failed: {(int)response.StatusCode} {response.ReasonPhrase}");
-    //         return false;
-    //     }
-
-    //     return true;
-    // }
-
-    // public async Task<string> DownloadCloudSave(string saveSlot)
-    // {
-    //     await EnsureInitializedAsync();
-
-    //     var request = new CloudSaveRequest
-    //     {
-    //         device_id = _deviceId,
-    //         save_slot = saveSlot
-    //     };
-
-    //     string url = $"{SupabaseSettings.SupabaseURL}/functions/v1/{SupabaseSettings.SaveDownloadFunction}";
-    //     string json = JsonUtility.ToJson(request);
-    //     var response = await PostJsonAsync(url, json);
-
-    //     if (!response.IsSuccessStatusCode)
-    //     {
-    //         Debug.LogError($"Save download failed: {(int)response.StatusCode} {response.ReasonPhrase}");
-    //         return null;
-    //     }
-
-    //     return await response.Content.ReadAsStringAsync();
-    // }
-
-    // private async Task<HttpResponseMessage> PostJsonAsync(string url, string json)
-    // {
-    //     var request = new HttpRequestMessage(HttpMethod.Post, url)
-    //     {
-    //         Content = new StringContent(json, Encoding.UTF8, "application/json")
-    //     };
-
-    //     request.Headers.Add("apikey", SupabaseSettings.SupabaseAnonKey);
-    //     request.Headers.Add("Authorization", $"Bearer {SupabaseSettings.SupabaseAnonKey}");
-
-    //     return await _httpClient.SendAsync(request);
-    // }
 
 
     // This method will update the deaths based on a paramater
@@ -265,6 +271,59 @@ public class SupabaseManager : MonoBehaviour
         }
         catch (Exception e){
             Debug.LogError($"Failed to increment deaths: {e}");
+        }
+    }
+
+
+
+
+
+    // Gathering saves
+    public async Task<Save> GetSaveFromSupabase(int slot)
+    {
+        await EnsureInitializedAsync();
+
+        try
+        {
+            var path = $"{_player.id}/save_{slot}.json";
+
+
+            var saveData = await _supabase.Storage
+                .From("player_saves")
+                .Download(path, null);
+
+            var saveJson = Encoding.UTF8.GetString(saveData);
+            return new Save(saveJson);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to download save: {e}");
+            return null;
+        }
+    }
+
+    public async Task<bool> SaveSaveToSupabase(int slot, Save save)
+    {
+        if (IsOffline)
+        {
+            Debug.LogWarning("Cannot save to cloud while in offline mode.");
+            return false;
+        }
+
+        await EnsureInitializedAsync();
+
+        try
+        {
+            var path = $"{_player.id}/save_{slot}.json";
+            var saveData = Encoding.UTF8.GetBytes(save.ToJsonString());
+
+            await _supabase.Storage.From("player_saves").Upload(saveData, path, new Supabase.Storage.FileOptions { Upsert = true });
+            return true;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to upload save: {e}");
+            return false;
         }
     }
 }
