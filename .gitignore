@@ -12,9 +12,6 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
-*.meta
-/ProjectSettings/
-/Packages/
 /Scripts/obj/Debug/net10.0/
 /.bezisidekick/
 /.plastic/
