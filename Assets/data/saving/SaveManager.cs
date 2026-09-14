@@ -106,7 +106,7 @@ public class SaveManager : MonoBehaviour
         }
     }
 
-    public async Task<bool> SaveSaveToDisk(int slot, Save save)
+    public Task<bool> SaveSaveToDisk(int slot, Save save)
     {
         string basePath = Application.persistentDataPath + "/saves/";
         if (!Directory.Exists(basePath))
@@ -116,7 +116,7 @@ public class SaveManager : MonoBehaviour
 
         string json = save.ToJsonString();
         File.WriteAllText(basePath + $"save{slot}.json", json);
-        return true;
+        return Task.FromResult(true);
     }
 
     public Save GetSave(int slot)

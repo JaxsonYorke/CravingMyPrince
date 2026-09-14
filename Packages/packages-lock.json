@@ -22,11 +22,10 @@
       "url": "https://registry.spoiledcat.com"
     },
     "com.supabase.unity": {
-      "version": "https://github.com/JaxsonYorke/supabase-unity.git?path=Unity",
+      "version": "file:com.supabase.unity",
       "depth": 0,
-      "source": "git",
-      "dependencies": {},
-      "hash": "2a3baa99db627647dcf16b16f554223a11b7d8ad"
+      "source": "embedded",
+      "dependencies": {}
     },
     "com.unity.2d.animation": {
       "version": "13.0.4",

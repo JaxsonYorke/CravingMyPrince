@@ -2,6 +2,7 @@ using UnityEngine;
 using Supabase;
 using System;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Client = Supabase.Client;
 
@@ -290,7 +291,7 @@ public class SupabaseManager : MonoBehaviour
 
             var saveData = await _supabase.Storage
                 .From("player_saves")
-                .Download(path, null);
+                .Download(path, (EventHandler<float>)null, CancellationToken.None, null);
 
             var saveJson = Encoding.UTF8.GetString(saveData);
             return new Save(saveJson);
