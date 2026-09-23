@@ -1,6 +1,8 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using Cysharp.Threading.Tasks;
+
+
 
 public class bootstrapper : MonoBehaviour
 {
@@ -9,14 +11,14 @@ public class bootstrapper : MonoBehaviour
     [SerializeField] private SceneReference mainMenuScene;
     void Start()
     {
-        StartCoroutine(waitUntillLoaded());
+        _ = waitUntillLoaded();
     }
 
-    private IEnumerator waitUntillLoaded()
+    private async UniTask waitUntillLoaded()
     {
-        while (!_supabaseManager.Initialization.IsCompleted || _saveManager.IsReady == false)
+        while (_supabaseManager.CurrentStatus != Status.Ready || _saveManager.IsReady == false)
         {
-            yield return null;
+            await UniTask.Yield();
         }
         if (mainMenuScene != null)
         {

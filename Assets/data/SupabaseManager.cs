@@ -3,7 +3,7 @@ using Supabase;
 using System;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using Client = Supabase.Client;
 
 using Assets.data.databaseTypes;
@@ -16,37 +16,43 @@ public enum NotificationType
     Error
 }
 
+public enum Status
+{
+    Initializing,
+    Ready,
+    Offline
+}
+
 public class SupabaseManager : MonoBehaviour
 {
     public static SupabaseManager Instance { get; private set; }
-    public Client _supabase;
-    public Player _player;
-    public Stats _playerStats;
 
-    [HideInInspector]
-    public bool IsReady { get; private set; }
-    [HideInInspector]
-    public bool IsOffline { get; private set; }
+
+    private Client _supabase;
+    private Player _player;
+    private Stats _playerStats;
+
+    private Status _status;
+    public Status CurrentStatus => _status;
+
+    public bool IsOffline => _status == Status.Offline;
+    public bool IsReady => _status == Status.Ready;
+
 
     [HideInInspector]
     public string _deviceId;
 
 
-    private Task _initializeTask;
-
-    private TaskCompletionSource<bool> _initializationTcs = new TaskCompletionSource<bool>();
-    public Task Initialization => _initializationTcs.Task;
-
+    private UniTask _initializeTask;
+    // This completion source acts as a gatekeeper that other scripts can await
+    private UniTaskCompletionSource _initCompletionSource = new UniTaskCompletionSource();
     
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        _deviceId = GetOrCreateDeviceId();
-        Debug.Log($"DeviceId: {_deviceId}");
+    /// <summary>
+    /// Expose this task so any script in your game can do: await SupabaseManager.Instance.EnsureReady();
+    /// </summary>
+    public UniTask EnsureReady() => _initCompletionSource.Task;
 
-        _initializeTask = InitializeAsync();
-        _ = StartFlowAsync();
-    }
+
 
     private void Awake()
     {
@@ -59,142 +65,54 @@ public class SupabaseManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(this.gameObject);
+
+        _deviceId = GetOrCreateDeviceId();
+        Debug.Log($"DeviceId: {_deviceId}");
+
+        Initialize().Forget(); // Start the initialization process without awaiting it
     }
 
 #region Initialization
-    private async Task StartFlowAsync()
+    private async UniTaskVoid Initialize()
     {
-        // Check the internet connection, if there is no internet connection, set IsOffline to true and skip initialization
+        _status = Status.Initializing;
+
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
             Debug.LogWarning("No internet connection detected. SupabaseManager will operate in offline mode.");
-            IsReady = true; // Set to true to allow the game to continue, but you may want to handle this differently
-            IsOffline = true;
-            _initializationTcs.SetResult(false);
+            _status = Status.Offline;
+            _initCompletionSource.TrySetResult(); // Signal that initialization is complete
             return;
         }
+
+        await createSupabaseClient();
+
+        if (_status == Status.Offline)
+        {
+            Debug.LogWarning("SupabaseManager is offline. Skipping record initialization.");
+            _initCompletionSource.TrySetResult(); // Signal that initialization is complete
+            return;
+        }
+
+
+        // Supabase is online and initialized, now ensure the player and stats records exist
         try
         {
-            await _initializeTask;
             await EnsureRecords();
-
-            _initializationTcs.SetResult(true);
         }
         catch (Exception e)
         {
             Debug.LogError($"Supabase init failed: {e}");
-            _initializationTcs.SetException(e);
+            _status = Status.Offline;
+            return;
         }
+
+        _status = Status.Ready; // Set to true to allow the game to continue
+        _initCompletionSource.TrySetResult(); // Signal that initialization is complete
+        Debug.Log("SupabaseManager is ready.");
     }
 
-    private async Task EnsureRecords()
-    {
-        print("initializing player record...");
-        await EnsureInitializedAsync();
-        await EnsurePlayerRecord();
-        await EnsurePlayerStatsRecord();
-        await EnsurePlayerSavesRecord();
-
-    }
-
-    private async Task EnsurePlayerRecord(){
-        Player newPlayer = null;
-        var playerRes = await _supabase.From<Player>().Where(p => p.device_id == _deviceId).Get();
-        _player = playerRes.Models.Count > 0 ? playerRes.Models[0] : null;
-
-        if(playerRes.Models.Count == 0)
-        {
-            // create the player
-            newPlayer = new Player
-            {
-                device_id = _deviceId,
-                display_name = $"Player-{_deviceId.Substring(0, 8)}",
-                created_at = DateTime.UtcNow
-            };
-            _player = newPlayer;
-            await _supabase.From<Player>().Insert(newPlayer);
-            Debug.Log($"Created new player with device id {_deviceId}");
-
-        }
-    }
-
-    private async Task EnsurePlayerStatsRecord()
-    {
-        Stats newStats = null;
-        var playerStatsRes = await _supabase.From<Stats>().Where(s => s.player_id == _player.id).Get();
-        _playerStats = playerStatsRes.Models.Count > 0 ? playerStatsRes.Models[0] : null;
-
-        if (playerStatsRes.Models.Count == 0)
-        {
-            // create the stats for the player
-            newStats = new Stats
-            {
-                player_id = _player.id,
-                deaths = 0,
-                total_playtime_seconds = 0,
-                total_achievements = 0
-            };
-            _playerStats = newStats;
-            await _supabase.From<Stats>().Insert(newStats);
-            Debug.Log($"Created stats for existing player with device id {_deviceId}");
-        }
-    }
-
-    private async Task EnsurePlayerSavesRecord()
-    {
-        var playerSavesRes = await _supabase.Storage.From("player_saves").List(_player.id + "/");
-
-        foreach(var item in playerSavesRes)
-        {
-            Debug.Log($"Found save file: {item.Name}");
-        }
-
-        if (playerSavesRes.Count == 0)
-        {
-            // create empty saves for the player
-            var emptySaveData = Encoding.UTF8.GetBytes(Save.GetEmptySaveJson());
-            await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_1.json");
-            await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_2.json");
-            await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_3.json");
-            Debug.Log($"Created empty saves for existing player with device id {_deviceId}");
-        }
-        if(playerSavesRes.Count == 1 || playerSavesRes.Count == 2){
-            bool hasSave1 = false;
-            bool hasSave2 = false;
-            bool hasSave3 = false;
-
-            foreach(var item in playerSavesRes)
-            {
-                Debug.Log($"Found save file: {item.Name}");
-                if(item.Name == "save_1.json") hasSave1 = true;
-                if(item.Name == "save_2.json") hasSave2 = true;
-                if(item.Name == "save_3.json") hasSave3 = true;
-            }
-
-            if(!hasSave1)
-            {
-                var emptySaveData = Encoding.UTF8.GetBytes(Save.GetEmptySaveJson());
-                await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_1.json");
-                Debug.Log($"Created missing save1 for existing player with device id {_deviceId}");
-            }
-            if(!hasSave2)
-            {
-                var emptySaveData = Encoding.UTF8.GetBytes(Save.GetEmptySaveJson());
-                await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_2.json");
-                Debug.Log($"Created missing save2 for existing player with device id {_deviceId}");
-            }
-            if(!hasSave3)
-            {
-                var emptySaveData = Encoding.UTF8.GetBytes(Save.GetEmptySaveJson());
-                await _supabase.Storage.From("player_saves").Upload(emptySaveData, _player.id + "/save_3.json");
-                Debug.Log($"Created missing save3 for existing player with device id {_deviceId}");
-            }
-            
-        }
-    }
-
-
-    private async Task InitializeAsync()
+    private async UniTask createSupabaseClient()
     {
         // Create a Supabase objects object.
         SupabaseOptions options = new()
@@ -207,12 +125,115 @@ public class SupabaseManager : MonoBehaviour
         // available in the Supabase dashboard. In addition, note that the public anon
         // key is not a security risk - in JavaScript projects, this key is visible
         // in the browser viewing source!
-        _supabase = new Client(SupabaseSettings.SupabaseURL, SupabaseSettings.SupabaseAnonKey, options);
-
-        await _supabase.InitializeAsync();
-
-        IsReady = true;
+        try
+        {
+            _supabase = new Client(SupabaseSettings.SupabaseURL, SupabaseSettings.SupabaseAnonKey, options);
+            await _supabase.InitializeAsync();
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"Failed to create Supabase client: {e}");
+            _status = Status.Offline;
+            return;
+        }
     }
+
+
+
+    private async UniTask EnsureRecords()
+    {
+        print("initializing player record...");
+        try
+        {
+            await EnsurePlayerRecord();
+
+            await UniTask.WhenAll(
+                EnsurePlayerStatsRecord(),
+                EnsurePlayerSavesRecord()
+            );
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"Error ensuring records: {e}");
+            _status = Status.Offline;
+        }
+    }
+
+    private async UniTask EnsurePlayerRecord()
+    {
+        var playerRes = await _supabase.From<Player>().Where(p => p.device_id == _deviceId).Get();
+        
+        if (playerRes.Models.Count > 0)
+        {
+            _player = playerRes.Models[0];
+        }
+        else
+        {
+            var newPlayer = new Player
+            {
+                device_id = _deviceId,
+                display_name = $"Player-{_deviceId.Substring(0, 8)}",
+                created_at = DateTime.UtcNow
+            };
+            _player = newPlayer;
+            await _supabase.From<Player>().Insert(newPlayer);
+            Debug.Log($"Created new player with device id {_deviceId}");
+        }
+    }
+
+    private async UniTask EnsurePlayerStatsRecord()
+    {
+        var playerStatsRes = await _supabase.From<Stats>().Where(s => s.player_id == _player.id).Get();
+
+        if (playerStatsRes.Models.Count == 0)
+        {
+            var newStats = new Stats
+            {
+                player_id = _player.id,
+                deaths = 0,
+                total_playtime_seconds = 0,
+                total_achievements = 0
+            };
+            _playerStats = newStats;
+            await _supabase.From<Stats>().Insert(newStats);
+            Debug.Log("Created missing player stats record.");
+        }
+        else
+        {
+            _playerStats = playerStatsRes.Models[0];
+        }
+    }
+
+    private async UniTask EnsurePlayerSavesRecord()
+    {
+        var playerSavesRes = await _supabase.Storage.From("player_saves").List(_player.id + "/");
+        
+        // Use a HashSet for quick lookup of existing files
+        var existingSaves = new System.Collections.Generic.HashSet<string>();
+        foreach (var item in playerSavesRes)
+        {
+            existingSaves.Add(item.Name);
+        }
+
+        // Clean logic up by treating 0 saves and missing saves identically
+        byte[] emptySaveData = null;
+
+        for (int i = 1; i <= 3; i++)
+        {
+            string saveName = $"save_{i}.json";
+            if (!existingSaves.Contains(saveName))
+            {
+                if (emptySaveData == null)
+                {
+                    emptySaveData = Encoding.UTF8.GetBytes(Save.GetEmptySaveJson());
+                }
+                
+                await _supabase.Storage.From("player_saves").Upload(emptySaveData, $"{_player.id}/{saveName}");
+                Debug.Log($"Created missing {saveName} for player.");
+            }
+        }
+    }
+
 
     private string GetOrCreateDeviceId()
     {
@@ -226,27 +247,25 @@ public class SupabaseManager : MonoBehaviour
         return id;
     }
 
-    private async Task EnsureInitializedAsync()
-    {
-        if (_initializeTask == null)
-            _initializeTask = InitializeAsync();
-
-        await _initializeTask;
-    }
 
 
 
 
 #endregion
 
-
-
+    private async UniTask ensureSupabaseInitialized()
+    {
+        if (_status == Status.Initializing)
+        {
+            await _initializeTask;
+        }
+    }
 
 
     // This method will update the deaths based on a paramater
-    public async Task UpdatePlayerDeaths(int deaths)
+    public async UniTask UpdatePlayerDeaths(int deaths)
     {
-        await EnsureInitializedAsync();
+        await _initializeTask;
 
         var playerRes = await _supabase.From<Stats>().Where(s => s.player_id == _player.id).Get();
 
@@ -262,10 +281,10 @@ public class SupabaseManager : MonoBehaviour
         await _supabase.From<Stats>().Update(player);
     }
 
-    public async Task IncrementDeaths()
+    public async UniTask IncrementDeaths()
     {
         print("Incrementing deaths in Supabase...");
-        await EnsureInitializedAsync();
+        await _initializeTask;
 
         try{
             await _supabase.Rpc("increment_deaths", new { p_player_id = _player.id });
@@ -280,9 +299,10 @@ public class SupabaseManager : MonoBehaviour
 
 
     // Gathering saves
-    public async Task<Save> GetSaveFromSupabase(int slot)
+    public async UniTask<Save> GetSaveFromSupabase(int slot)
     {
-        await EnsureInitializedAsync();
+        await ensureSupabaseInitialized();
+        
 
         try
         {
@@ -303,15 +323,15 @@ public class SupabaseManager : MonoBehaviour
         }
     }
 
-    public async Task<bool> SaveSaveToSupabase(int slot, Save save)
+    public async UniTask<bool> SaveSaveToSupabase(int slot, Save save)
     {
-        if (IsOffline)
+        if (_status == Status.Offline)
         {
             Debug.LogWarning("Cannot save to cloud while in offline mode.");
             return false;
         }
 
-        await EnsureInitializedAsync();
+        await _initializeTask;
 
         try
         {
